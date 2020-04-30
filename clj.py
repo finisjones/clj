@@ -2,13 +2,17 @@
 
 import argparse
 import subprocess
-from os import kill
+import editor
+from os import kill, path, unlink
 from os.path import expanduser
 from signal import SIGTERM
 from socket import socket as SOCKET, AF_UNIX, SOCK_DGRAM, error as sock_error
 from time import sleep
 
+
+
 SERVER_ADDR = expanduser('~/clj/.run/clj_socket_main')
+CLIENT_ADDR = expanduser('~/clj/.run/clj_socket_clj')
 
 def killDaemon():
     p1 = subprocess.Popen(["ps", "a"], stdout=subprocess.PIPE)
@@ -29,14 +33,24 @@ def startDaemon():
     subprocess.Popen(["./cljd.py"])
 
 def sendto_server(data):
+    ret =""
+    #chk client address path and remove it if there
+    try:
+        unlink(CLIENT_ADDR)
+    except OSError:
+        if(path.exists(CLIENT_ADDR)):
+           raise
+        
     with SOCKET(AF_UNIX, SOCK_DGRAM) as socket:
         try:
-
+            socket.bind(CLIENT_ADDR)
             socket.sendto(bytes(data, "utf-8"), SERVER_ADDR)
+            ret, address = socket.recvfrom(256)
+            
         except (sock_error) as msg:
             print("ERR::> " + str(msg))
-            shutdown_event.set();
-
+            #shutdown_event.set();
+    return ret
 
 
   
@@ -55,15 +69,21 @@ args = parser.parse_args()
 print(args.cmd)
 if(args.cmd == 'start'):
     print("\n*** Starting new command line journal '" + args.journal_name + "'. Run 'clj note' to enter notes. Run 'clj stop' to stop. ***\n")
-    startDaemon()
-    sleep(1)
-    sendto_server('start ' + args.journal_name)
+##    startDaemon()
+    sleep(0.1)
+    data = sendto_server('start ' + args.journal_name)
+    print(data)
 elif(args.cmd == 'note'):
-    pass
+    note = editor.edit(contents='', use_tty='use_tty')
+    
+    data = sendto_server('note')
+    data = sendto_server(str(note))
+    
 elif(args.cmd == 'stop'):
-    pass
+    data = sendto_server('stop')
 elif(args.cmd == 'list'):
-    pass
-                                                                                                                                          
+    data = sendto_server('status')
+    print("status: ")
+    print(data)                                                                                                                                      
 
 
